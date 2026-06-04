@@ -17,7 +17,7 @@ from __future__ import annotations
 import re
 from typing import Callable
 
-from .agents import PIPELINE
+from .agents import PIPELINE, ConsistencyJudge
 from .bible import SECTION_TITLES, StoryBible
 from .client import ModelClient
 from .config import AgentConfig, get_config
@@ -65,15 +65,18 @@ class EditorInChief:
         logger: RunLogger,
         *,
         expand_premise: bool = True,
+        judge: bool = True,
         agent_configs: dict[str, AgentConfig] | None = None,
         log: Callable[[str], None] = lambda _msg: None,
     ) -> None:
         self.client = client
         self.logger = logger
         self.expand_premise = expand_premise
+        self.judge = judge
         self.agent_configs = agent_configs or {}
         self.log = log
         self.bible = StoryBible()
+        self.judge_findings: str | None = None
 
     # -- the one place canonical truth is written -----------------------------
 
@@ -130,12 +133,32 @@ class EditorInChief:
             self.commit(agent.section, contribution)
             self.log(f"{agent.name}: committed {len(self.bible.get(agent.section))} chars")
 
+    def run_judge(self) -> str | None:
+        """Run the advisory consistency judge over the finished bible + prose.
+
+        Advisory only: the findings are stored and reported, never committed to
+        the bible and never used to block or trigger a rerun.
+        """
+        if not self.judge:
+            return None
+        judge = ConsistencyJudge(self._config_for("judge"))
+        self.log(f"judge: reviewing for contradictions ({judge.config.model}) ...")
+        self.judge_findings = judge.run(self.bible, self.client)
+        # Cheap signal: did it flag anything, or report clean?
+        verdict = "clean" if "No contradictions found." in self.judge_findings else "flagged contradictions"
+        self.log(f"judge: {verdict} (advisory; see judge_report.md)")
+        return self.judge_findings
+
     def write_artifacts(self) -> None:
         """Write the canonical bible + story as markdown and HTML reading copies."""
         self.logger.write_artifact("bible.md", self.bible.render())
         self.logger.write_artifact("story.md", self.bible.get("prose"))
         self.logger.write_html("story.html", "The Story", self.bible.get("prose"))
         self.logger.write_html("bible.html", "Story Bible", self.bible.render())
+        # The judge report is a separate artifact — never folded into bible.md.
+        if self.judge_findings is not None:
+            self.logger.write_artifact("judge_report.md", self.judge_findings)
+            self.logger.write_html("judge_report.html", "Consistency Report", self.judge_findings)
 
     # -- the whole run --------------------------------------------------------
 
@@ -146,6 +169,7 @@ class EditorInChief:
         """
         self.establish_premise(raw_premise)
         self.run_pipeline()
+        self.run_judge()
         self.write_artifacts()
         self.log(f"done -> {self.logger.dir}")
         return self.bible

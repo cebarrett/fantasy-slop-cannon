@@ -57,6 +57,11 @@ def main() -> None:
         help="commit the raw premise instead of having the editor expand it",
     )
     parser.add_argument(
+        "--no-judge",
+        action="store_true",
+        help="skip the advisory consistency judge at the end",
+    )
+    parser.add_argument(
         "--model",
         action="append",
         default=[],
@@ -76,6 +81,7 @@ def main() -> None:
         client,
         logger,
         expand_premise=not args.no_expand_premise,
+        judge=not args.no_judge,
         agent_configs=build_overrides(args.model),
         log=print,
     )
@@ -85,6 +91,8 @@ def main() -> None:
 
     print(f"\nRead the story:  {logger.dir / 'story.html'}")
     print(f"Read the bible:  {logger.dir / 'bible.html'}")
+    if editor.judge_findings is not None:
+        print(f"Consistency:     {logger.dir / 'judge_report.html'}")
 
 
 if __name__ == "__main__":

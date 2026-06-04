@@ -12,12 +12,14 @@ sequence, each reading everything the previous ones committed.
 
 from .base import Agent
 from .character import CharacterDesigner
+from .judge import ConsistencyJudge
 from .magic import MagicSystem
 from .plot import PlotArchitect
 from .prose import ProseWriter
 from .worldbuilder import Worldbuilder
 
-# Worker classes in execution order.
+# Worker classes in execution order. The judge is intentionally NOT in PIPELINE:
+# it is an advisory reviewer, not a producer stage.
 PIPELINE = [Worldbuilder, MagicSystem, CharacterDesigner, PlotArchitect, ProseWriter]
 
 __all__ = [
@@ -27,5 +29,6 @@ __all__ = [
     "CharacterDesigner",
     "PlotArchitect",
     "ProseWriter",
+    "ConsistencyJudge",
     "PIPELINE",
 ]
