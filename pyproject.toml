@@ -1,0 +1,24 @@
+[project]
+name = "slopcannon"
+version = "0.1.0"
+description = "A hierarchical multi-agent system that writes a fantasy short story. A learning project about orchestration."
+requires-python = ">=3.11"
+dependencies = [
+    "anthropic>=0.105,<0.106",
+    "python-dotenv>=1.0",
+    "markdown>=3.5",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+# Auto-discover slopcannon and its subpackages as they are added in later phases.
+include = ["slopcannon*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
