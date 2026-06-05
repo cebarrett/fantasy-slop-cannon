@@ -17,7 +17,7 @@ from __future__ import annotations
 import re
 from typing import Callable
 
-from .agents import PIPELINE, ConsistencyJudge, Finding, render_report
+from .agents import PIPELINE, ConsistencyJudge, Finding, MagicSystem, render_report
 from .bible import SECTION_ORDER, SECTION_TITLES, StoryBible
 from .client import ModelClient
 from .config import AgentConfig, get_config
@@ -85,6 +85,7 @@ class EditorInChief:
         self.agent_configs = agent_configs or {}
         self.log = log
         self.bible = StoryBible()
+        self.include_magic = True                           # editor decides at premise time
         self.findings: list[Finding] | None = None          # judge pass before revision
         self.findings_after: list[Finding] | None = None    # judge pass after revision
         self.revised_sections: list[str] = []
@@ -123,21 +124,36 @@ class EditorInChief:
         if raw_premise is None:
             raw_premise = self.generate_premise()
         if not self.expand_premise:
-            self.log("editor: using raw premise (expansion disabled)")
+            # No framing call to fold the scope decision into; default magic on.
+            self.log("editor: using raw premise (expansion disabled); magic stage ON by default")
             self.commit("premise", raw_premise)
             return
         cfg = self._config_for("editor")
-        self.log(f"editor: expanding premise ({cfg.model}) ...")
-        result = self.client.call(
+        self.log(f"editor: framing premise + scoping stages ({cfg.model}) ...")
+        data = self.client.call_structured(
             cfg,
             system=editor_prompts.SYSTEM,
             user=editor_prompts.premise_task(raw_premise),
+            tool=editor_prompts.EDITOR_TOOL,
         )
-        self.commit("premise", result.text)
+        self.commit("premise", data.get("brief") or raw_premise)
+        self.include_magic = bool(data.get("include_magic", True))
+        self.log(
+            f"editor: magic stage {'ON' if self.include_magic else 'OFF'} "
+            f"— {data.get('magic_reason', '')}"
+        )
 
     def run_pipeline(self) -> None:
-        """Run each worker in order; commit each contribution as it lands."""
+        """Run each worker in order; commit each contribution as it lands.
+
+        Optional stages the editor judged unnecessary are skipped — currently the
+        magic stage, so a premise that wants no magic gets an empty magic section
+        (render omits it) and no agent is pushed to invent one.
+        """
         for AgentClass in PIPELINE:
+            if AgentClass is MagicSystem and not self.include_magic:
+                self.log("magic: skipped (editor decided this story needs no magic system)")
+                continue
             cfg = self._config_for(AgentClass.name)
             agent = AgentClass(cfg)
             self.log(f"{agent.name}: writing '{agent.section}' ({agent.config.model}) ...")
