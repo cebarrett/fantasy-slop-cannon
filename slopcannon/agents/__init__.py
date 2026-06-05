@@ -12,7 +12,7 @@ sequence, each reading everything the previous ones committed.
 
 from .base import Agent
 from .character import CharacterDesigner
-from .judge import ConsistencyJudge
+from .judge import ConsistencyJudge, Finding, render_report
 from .magic import MagicSystem
 from .plot import PlotArchitect
 from .prose import ProseWriter
@@ -30,5 +30,7 @@ __all__ = [
     "PlotArchitect",
     "ProseWriter",
     "ConsistencyJudge",
+    "Finding",
+    "render_report",
     "PIPELINE",
 ]

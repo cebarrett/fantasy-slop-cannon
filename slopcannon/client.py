@@ -12,6 +12,7 @@ hiding the loop.
 
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import dataclass
 
@@ -48,25 +49,26 @@ class ModelClient:
         self._logger = logger
         self._n = 0
 
+    def _base_kwargs(self, config: AgentConfig, system: str, user: str) -> dict:
+        kwargs: dict = {
+            "model": config.model,
+            "max_tokens": config.max_tokens,
+            "system": system,
+            "messages": [{"role": "user", "content": user}],
+        }
+        # Only send temperature when explicitly set; some models (e.g. Opus 4.8)
+        # deprecate the parameter and reject non-default values.
+        if config.temperature is not None:
+            kwargs["temperature"] = config.temperature
+        return kwargs
+
     def call(self, config: AgentConfig, *, system: str, user: str) -> CallResult:
         """Make one logged model call for the given agent config."""
         index = self._n
         self._n += 1
 
-        # Only send temperature when explicitly set; some models (e.g. Opus 4.8)
-        # deprecate the parameter and reject non-default values.
-        extra: dict = {}
-        if config.temperature is not None:
-            extra["temperature"] = config.temperature
-
         started = time.monotonic()
-        resp = self._client.messages.create(
-            model=config.model,
-            max_tokens=config.max_tokens,
-            system=system,
-            messages=[{"role": "user", "content": user}],
-            **extra,
-        )
+        resp = self._client.messages.create(**self._base_kwargs(config, system, user))
         latency_ms = int((time.monotonic() - started) * 1000)
 
         text = _extract_text(resp.content)
@@ -95,3 +97,42 @@ class ModelClient:
             stop_reason=stop_reason,
             latency_ms=latency_ms,
         )
+
+    def call_structured(self, config: AgentConfig, *, system: str, user: str, tool: dict) -> dict:
+        """Make one logged call that forces the model to return structured data.
+
+        `tool` is an Anthropic tool definition ({name, description, input_schema}).
+        The model is forced to call it; we return the validated input dict. Logged
+        like any other call, with the JSON output captured in the trace.
+        """
+        index = self._n
+        self._n += 1
+
+        kwargs = self._base_kwargs(config, system, user)
+        kwargs["tools"] = [tool]
+        kwargs["tool_choice"] = {"type": "tool", "name": tool["name"]}
+
+        started = time.monotonic()
+        resp = self._client.messages.create(**kwargs)
+        latency_ms = int((time.monotonic() - started) * 1000)
+
+        data: dict = {}
+        for block in resp.content:
+            if getattr(block, "type", None) == "tool_use":
+                data = block.input
+                break
+
+        usage = getattr(resp, "usage", None)
+        self._logger.log_call(
+            index=index,
+            agent=config.name,
+            model=config.model,
+            system=system,
+            user=user,
+            output=json.dumps(data, indent=2),
+            input_tokens=getattr(usage, "input_tokens", None),
+            output_tokens=getattr(usage, "output_tokens", None),
+            latency_ms=latency_ms,
+            stop_reason=getattr(resp, "stop_reason", None),
+        )
+        return data

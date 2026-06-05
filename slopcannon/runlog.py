@@ -100,6 +100,19 @@ class RunLogger:
         path.write_text(content, encoding="utf-8")
         return path
 
+    def archive_revision(self, section: str, old_text: str) -> Path:
+        """Archive a superseded section to logs before it's overwritten in place.
+
+        This is the canonicalization discipline: the bible holds only the current
+        truth, while the version history lives here in the run log — never inline
+        where a later agent might read a stale version.
+        """
+        rdir = self.dir / "revisions"
+        rdir.mkdir(exist_ok=True)
+        path = rdir / f"{section}.superseded.md"
+        path.write_text(old_text, encoding="utf-8")
+        return path
+
     def write_html(self, filename: str, title: str, markdown_text: str) -> Path:
         """Write a dark-theme HTML reading copy of some markdown (story/bible)."""
         from .html import render_page

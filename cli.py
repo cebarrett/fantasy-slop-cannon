@@ -62,6 +62,11 @@ def main() -> None:
         help="skip the advisory consistency judge at the end",
     )
     parser.add_argument(
+        "--revise",
+        action="store_true",
+        help="after judging, run a single revision pass to fix flagged contradictions in place",
+    )
+    parser.add_argument(
         "--model",
         action="append",
         default=[],
@@ -70,6 +75,9 @@ def main() -> None:
     )
     parser.add_argument("--runs-dir", default="runs", help="where to write run output")
     args = parser.parse_args()
+
+    if args.revise and args.no_judge:
+        raise SystemExit("--revise needs the judge; don't combine it with --no-judge.")
 
     load_dotenv()  # entry point's job: pull ANTHROPIC_API_KEY into the env
 
@@ -82,6 +90,7 @@ def main() -> None:
         logger,
         expand_premise=not args.no_expand_premise,
         judge=not args.no_judge,
+        revise=args.revise,
         agent_configs=build_overrides(args.model),
         log=print,
     )
@@ -91,8 +100,11 @@ def main() -> None:
 
     print(f"\nRead the story:  {logger.dir / 'story.html'}")
     print(f"Read the bible:  {logger.dir / 'bible.html'}")
-    if editor.judge_findings is not None:
+    if editor.findings is not None:
         print(f"Consistency:     {logger.dir / 'judge_report.html'}")
+    if editor.revised_sections:
+        print(f"Revision:        {logger.dir / 'revision_report.html'}")
+        print(f"Consistency(2):  {logger.dir / 'judge_report_after.html'}")
 
 
 if __name__ == "__main__":

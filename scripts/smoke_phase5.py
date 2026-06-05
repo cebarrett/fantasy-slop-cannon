@@ -20,7 +20,7 @@ Run:  python scripts/smoke_phase5.py
 
 from dotenv import load_dotenv
 
-from slopcannon.agents import ConsistencyJudge
+from slopcannon.agents import ConsistencyJudge, render_report
 from slopcannon.bible import StoryBible
 from slopcannon.client import ModelClient
 from slopcannon.runlog import RunLogger
@@ -78,12 +78,18 @@ def main() -> None:
     judge = ConsistencyJudge()
 
     print(f"running judge ({judge.config.model}) over a bible with 4 planted contradictions ...\n")
-    report = judge.run(bible, client)
+    findings = judge.run(bible, client)
+    report = render_report(findings)
 
     logger.write_artifact("judge_report.md", report)
     logger.write_html("judge_report.html", "Consistency Report", report)
 
     print(report)
+    print("\n--- structured routing targets (most-downstream section per finding) ---")
+    order = ["premise", "world", "magic", "characters", "plot", "prose"]
+    for f in findings:
+        target = max(f.sections, key=order.index) if f.sections else "?"
+        print(f"  [{f.severity}] sections={f.sections} -> target={target}")
     print(f"\nreport + trace under: {logger.dir}")
 
 
