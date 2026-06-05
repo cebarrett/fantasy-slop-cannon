@@ -103,13 +103,19 @@ class EditorInChief:
     # -- stages ---------------------------------------------------------------
 
     def generate_premise(self) -> str:
-        """Have the editor invent a one-line fantasy premise from nothing."""
+        """Have the editor invent a one-line fantasy premise from nothing.
+
+        A random diversity seed is drawn and injected into the generation task
+        to push each independent call off the model's default attractor (quiet
+        grief/memory premises). The seed is logged so runs are inspectable.
+        """
+        seed = editor_prompts.draw_seed()
+        self.log(f"editor: generating a premise (seed: {editor_prompts.seed_note(seed)}) ...")
         cfg = self._config_for("editor")
-        self.log(f"editor: generating a premise ({cfg.model}) ...")
         result = self.client.call(
             cfg,
             system=editor_prompts.GENERATE_SYSTEM,
-            user=editor_prompts.GENERATE_TASK,
+            user=editor_prompts.generate_task(seed),
         )
         premise = result.text.strip()
         self.log(f"editor: generated premise -> {premise}")
